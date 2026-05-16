@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>HEMS Pakistan v3 — Convex Optimization</title>
+<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div>
+        <h1>HEMS Pakistan <span class="version">v3.0</span></h1>
+        <p>Robust Convex Optimization · NEPRA IESCO Feb 2026 · Budget 2024-25</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="header-badges">
+        <span class="badge badge-green">LP + SOCP</span>
+        <span class="badge badge-blue">Load Shedding</span>
+        <span class="badge badge-purple">Policy Analysis</span>
+        <span class="badge badge-orange" id="status-badge">Ready</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>⚙️ System Parameters</h3>
+      <div class="form-group">
+        <label>Season</label>
+        <select id="season" class="input-ctrl">
+          <option value="summer">☀️ Summer (Jun–Sep)</option>
+          <option value="winter">❄️ Winter (Dec–Feb)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Battery: <b id="batt-lbl">13.5</b> kWh</label>
+        <input type="range" id="battery_size" min="0" max="30" step="0.5" value="13.5"
+               class="slider" oninput="lbl('batt-lbl',this.value)"/>
+        <div class="rl"><span>0</span><span>30 kWh</span></div>
+      </div>
+      <div class="form-group">
+        <label>Solar: <b id="solar-lbl">10.0</b> kW</label>
+        <input type="range" id="solar_capacity" min="0" max="20" step="0.5" value="10"
+               class="slider" oninput="lbl('solar-lbl',this.value)"/>
+        <div class="rl"><span>0</span><span>20 kW</span></div>
+      </div>
+      <div class="form-group">
+        <label>Uncertainty ρ: <b id="rho-lbl">1.0</b> kW</label>
+        <input type="range" id="rho" min="0" max="3" step="0.1" value="1.0"
+               class="slider" oninput="lbl('rho-lbl',this.value)"/>
+        <div class="rl"><span>0 (Nominal LP)</span><span>3 kW (Robust SOCP)</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>🇵🇰 Pakistan Policy Mode</h3>
+      <div class="form-group">
+        <label>Billing Mode</label>
+        <select id="billing_mode" class="input-ctrl">
+          <option value="net_metering">Net Metering (PKR 19.32/kWh)</option>
+          <option value="gross_metering">Gross Metering (PKR 10.00/kWh)</option>
+          <option value="capacity_tax">Capacity Tax (PKR 2000/kW/month)</option>
+        </select>
+      </div>
+      <div class="policy-note" id="policy-note">
+        Current AEDB policy. IMF may push to gross metering.
+      </div>
+      <label class="chk">
+        <input type="checkbox" id="use_loadshedding" checked/>
+        Enable Load Shedding (G_t matrix)
+      </label>
+      <label class="chk">
+        <input type="checkbox" id="use_ev"/> EV Charger (3.3 kW, 4h)
+      </label>
+      <label class="chk">
+        <input type="checkbox" id="use_gst" checked/> GST 18%
+      </label>
+      <label class="chk">
+        <input type="checkbox" id="use_fca" checked/> FCA (PKR 3.23/kWh)
+      </label>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>💡 Current Tariff (Effective)</h3>
+      <div class="tariff-grid">
+        <div class="tr"><span>Peak (18-22h)</span><span class="tv peak" id="t-peak">—</span></div>
+        <div class="tr"><span>Off-Peak</span><span class="tv offpeak" id="t-offpeak">—</span></div>
+        <div class="tr"><span>Feed-in (Export)</span><span class="tv export" id="t-export">—</span></div>
+        <div class="tr"><span>FCA</span><span class="tv">PKR 3.23</span></div>
+        <div class="tr"><span>CPP</span><span class="tv">PKR 2.89</span></div>
+        <div class="tr"><span>QTA</span><span class="tv">PKR 1.85</span></div>
+        <div class="tr"><span>GST</span><span class="tv">18%</span></div>
+        <div class="tr"><span>Demand</span><span class="tv">PKR 400/kW</span></div>
+      </div>
+      <p class="src">NEPRA/IESCO Feb 2026 · SRO 1316(I)/2024</p>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>🔌 Shiftable Loads</h3>
+      <div class="app-list">
+        <div class="app-item">
+          <span class="app-dot" style="background:#4f8ef7"></span>
+          <div><b>Washing Machine</b><br><small>1.5kW · 2h · 08-18h</small></div>
+        </div>
+        <div class="app-item">
+          <span class="app-dot" style="background:#34d399"></span>
+          <div><b>Water Heater</b><br><small>3.0kW · 1h · 05-08h, 18-22h</small></div>
+        </div>
+        <div class="app-item">
+          <span class="app-dot" style="background:#fbbf24"></span>
+          <div><b>Dishwasher</b><br><small>1.2kW · 1h · 09-17h</small></div>
+        </div>
+        <div class="app-item" id="ev-item" style="opacity:0.4">
+          <span class="app-dot" style="background:#a78bfa"></span>
+          <div><b>EV Charger</b><br><small>3.3kW · 4h · 22-06h (off-peak)</small></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-col">
+      <button class="btn btn-primary" onclick="runAll()">🚀 Optimize Now</button>
+      <button class="btn btn-secondary" onclick="runBilling()">🏛️ Policy Comparison</button>
+      <button class="btn btn-secondary" onclick="runExperiments()">🔬 Experiments</button>
+    </div>
+
+  </aside>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <!-- Loading -->
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Running CVXPY Solver…</p>
+      <small id="loading-sub">Cascade: ECOS → SCS → OSQP → Greedy Fallback</small>
+    </div>
+
+    <!-- Alert Banner -->
+    <div class="alert" id="alert-banner" style="display:none"></div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi"><div class="ki">💰</div><div class="kl">Optimal Cost</div><div class="kv" id="k-cost">—</div><div class="ks">PKR/day</div></div>
+      <div class="kpi kpi-g"><div class="ki">📈</div><div class="kl">vs Grid-Only Savings</div><div class="kv" id="k-save">—</div><div class="ks">PKR/day</div></div>
+      <div class="kpi kpi-b"><div class="ki">☀️</div><div class="kl">Export Revenue</div><div class="kv" id="k-exp">—</div><div class="ks">PKR/day</div></div>
+      <div class="kpi kpi-o"><div class="ki">🔋</div><div class="kl">Peak Demand</div><div class="kv" id="k-peak">—</div><div class="ks">kW</div></div>
+      <div class="kpi kpi-p"><div class="ki">📉</div><div class="kl">Savings %</div><div class="kv" id="k-pct">—</div><div class="ks">vs no-optimization</div></div>
+      <div class="kpi"><div class="ki">📅</div><div class="kl">Monthly Estimate</div><div class="kv" id="k-month">—</div><div class="ks">PKR/month</div></div>
+    </div>
+
+    <!-- Solver Info -->
+    <div class="solver-bar" id="solver-bar" style="display:none">
+      <span id="solver-info">Solver: —</span>
+      <span id="shedding-info"></span>
+      <span id="billing-info"></span>
+      <span id="sim-cd-warn"></span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab active" onclick="tab(this,'advisor')">🏠 Solar Advisor</button>
+      <button class="tab" onclick="tab(this,'schedule')">📅 24h Schedule</button>
+      <button class="tab" onclick="tab(this,'soc')">🔋 Battery SOC</button>
+      <button class="tab" onclick="tab(this,'costs')">💵 Cost Breakdown</button>
+      <button class="tab" onclick="tab(this,'duals')">📊 Shadow Prices</button>
+      <button class="tab" onclick="tab(this,'loadshed')">⚡ Load Shedding</button>
+      <button class="tab" onclick="tab(this,'policy')">🏛️ Policy Analysis</button>
+      <button class="tab" onclick="tab(this,'experiments')">🔬 Experiments</button>
+      <button class="tab" onclick="tab(this,'gantt')">🏠 Appliances</button>
+    </div>
+
+    <div class="panels">
+
+      <!-- ── Advisor Panel (NEW — first position) ── -->
+      <div class="panel active" id="p-advisor">
+
+        <!-- Wizard Input -->
+        <div class="adv-wizard">
+          <h3>🏠 Solar Investment Advisor</h3>
+          <p>Tell us about your home — we'll recommend the best solar system for your budget, with exact equipment, costs, and payback timeline.</p>
+
+          <div class="adv-help">
+            <b>Tip:</b> Check your IESCO/WAPDA bill for monthly units (kWh). Average Pakistani household uses 300-600 units/month.
+            A 5kW system costs ~PKR 600K-800K. A 10kW system costs ~PKR 1.0M-1.5M.
+          </div>
+
+          <div class="adv-form">
+            <div class="adv-field">
+              <label>Monthly Consumption</label>
+              <input type="number" id="adv-units" value="500" min="50" max="5000" step="10"/>
+              <div class="unit">kWh/month (check your bill)</div>
+            </div>
+            <div class="adv-field">
+              <label>Total Budget</label>
+              <input type="number" id="adv-budget" value="1000000" min="100000" max="10000000" step="50000"/>
+              <div class="unit">PKR (panels + inverter + battery + installation)</div>
+            </div>
+            <div class="adv-field">
+              <label>City / Area</label>
+              <select id="adv-location">
+                <option value="Rawalpindi">Rawalpindi</option>
+                <option value="Islamabad">Islamabad</option>
+                <option value="Lahore">Lahore</option>
+                <option value="Karachi">Karachi</option>
+                <option value="Peshawar">Peshawar</option>
+                <option value="Faisalabad">Faisalabad</option>
+                <option value="Multan">Multan</option>
+              </select>
+            </div>
+            <div class="adv-field">
+              <label>Battery Preference</label>
+              <select id="adv-battery">
+                <option value="auto">Auto (Recommend Best)</option>
+                <option value="yes">Yes — I want battery backup</option>
+                <option value="no">No — Grid-only (cheapest)</option>
+              </select>
+            </div>
+            <div class="adv-field">
+              <label>&nbsp;</label>
+              <label class="chk" style="margin-top:6px">
+                <input type="checkbox" id="adv-loadshed" checked/>
+                My area has load shedding
+              </label>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="runAdvisor()" style="min-width:200px">
+            🔍 Find Best Solar System
+          </button>
+        </div>
+
+        <!-- Results (populated by JS) -->
+        <div id="advisor-results"></div>
+
+        <!-- Payback Chart -->
+        <div class="card" id="adv-chart-wrap" style="margin-top:14px">
+          <div class="ch">
+            <h3>📊 Payback & ROI Comparison</h3>
+            <p>Compare payback periods and 10-year ROI across all recommended configurations</p>
+          </div>
+          <div id="adv-chart" class="ca"></div>
+        </div>
+
+      </div>
+
+      <!-- ── Schedule Panel ── -->
+      <div class="panel" id="p-schedule">
+        <div class="card">
+          <div class="ch"><h3>24-Hour Optimal Energy Schedule</h3>
+          <p>Grid import/export · Solar · Battery · Load · G_t outage blocks shown</p></div>
+          <div id="c-schedule" class="ca"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="p-soc">
+        <div class="card">
+          <div class="ch"><h3>Battery State of Charge</h3>
+          <p>SOC trajectory with E_min, E_max bounds and load-shedding reserve levels</p></div>
+          <div id="c-soc" class="ca"></div>
+        </div>
+      </div>
+
+      <div class="panel" id="p-costs">
+        <div class="card">
+          <div class="ch"><h3>Cost Comparison: Optimal vs Baselines</h3>
+          <p>Stacked breakdown: Import · Export · Degradation · Demand Charge · Capacity Tax</p></div>
+          <div id="c-costs" class="ca"></div>
+        </div>
+        <div class="card" id="savings-wrap"></div>
+      </div>
+
+      <div class="panel" id="p-duals">
+        <div class="card">
+          <div class="ch"><h3>Dual Variables (Shadow Prices μ_t)</h3>
+          <p>Energy marginal price vs TOU tariff — KKT stationarity verification</p></div>
+          <div id="c-duals" class="ca"></div>
+        </div>
+        <div class="card" id="insights-wrap"></div>
+      </div>
+
+      <div class="panel" id="p-loadshed">
+        <div class="card">
+          <div class="ch"><h3>Load Shedding Impact Analysis</h3>
+          <p>G_t grid availability · Battery reserve constraints · SOC during outages</p></div>
+          <div id="c-loadshed" class="ca"></div>
+        </div>
+        <div class="card" id="ls-info"></div>
+      </div>
+
+      <div class="panel" id="p-policy">
+        <div class="card">
+          <div class="ch"><h3>Policy Mode Comparison</h3>
+          <p>Net Metering vs Gross Metering vs Capacity Tax — financial impact</p></div>
+          <div id="c-policy" class="ca"></div>
+        </div>
+        <div class="card" id="policy-details"></div>
+      </div>
+
+      <div class="panel" id="p-experiments">
+        <div class="exp-grid">
+          <div class="card"><div class="ch"><h3>Pareto: Cost vs Robustness</h3></div><div id="c-pareto" class="ca-sm"></div></div>
+          <div class="card"><div class="ch"><h3>Battery Sizing Curve</h3></div><div id="c-batt" class="ca-sm"></div></div>
+          <div class="card"><div class="ch"><h3>Solar Capacity Impact</h3></div><div id="c-solar" class="ca-sm"></div></div>
+          <div class="card"><div class="ch"><h3>Degradation vs Cycling</h3></div><div id="c-degrad" class="ca-sm"></div></div>
+        </div>
+      </div>
+
+      <div class="panel" id="p-gantt">
+        <div class="card">
+          <div class="ch"><h3>Appliance Scheduling (Gantt)</h3>
+          <p>Optimal windows — shifted to solar hours to minimize grid cost</p></div>
+          <div id="c-gantt" class="ca"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Math Summary -->
+    <div class="math-panel">
+      <h3>📐 Mathematical Formulation (Enhanced v3.0)</h3>
+      <div class="math-grid">
+        <div class="mb">
+          <h4>Objective (minimize)</h4>
+          <code>Σ_t[c_t·p⁺_t - c_exp·p⁻_t + λ(pᶜ+pᵈ)]·Δt<br>+ c_dem·P_pk/30 + C_tax·P_PV</code>
+        </div>
+        <div class="mb">
+          <h4>C1: Energy Balance + G_t</h4>
+          <code>G_t·p⁺_t - G_t·p⁻_t + pᵈ_t - pᶜ_t<br>= p_load + Σ shift - p_pv ∀t</code>
+        </div>
+        <div class="mb">
+          <h4>C4: Grid Limits × G_t</h4>
+          <code>0 ≤ p⁺_t ≤ P_grid · G_t<br>0 ≤ p⁻_t ≤ P_exp · G_t</code>
+        </div>
+        <div class="mb">
+          <h4>C7: SOC Reserve</h4>
+          <code>soc[t] ≥ E_min + 40%·E_max<br>∀t before shedding hours</code>
+        </div>
+        <div class="mb">
+          <h4>C8: Robust SOCP</h4>
+          <code>||s||₂ ≥ ρ<br>(solar uncertainty robustness)</code>
+        </div>
+        <div class="mb">
+          <h4>Fallback Cascade</h4>
+          <code>ECOS → SCS → OSQP<br>→ Greedy Heuristic</code>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<footer class="footer">
+  <p>HEMS Pakistan v3.0 · Robust Convex Optimization · NEPRA/IESCO Feb 2026 ·
+  Pakistan Budget 2024-25 · Boyd &amp; Vandenberghe (2004) · AEDB 2024 ·
+  IMF Article IV 2024</p>
+</footer>
+
+<script src="/js/api.js"></script>
+<script src="/js/charts.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/advisor.js"></script>
+</body>
+</html>
