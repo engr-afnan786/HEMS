@@ -14,7 +14,7 @@ This project is a Home Energy Management System (HEMS) for Pakistan (NEPRA IESCO
 1. Clone the repository:
    ```bash
    git clone <your-github-repo-url>
-   cd HEMS_Production
+   cd HEMS
    ```
 
 2. Create a virtual environment and activate it:
