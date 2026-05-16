@@ -8,3 +8,33 @@ __pycache__/
 .DS_Store
 dist/
 build/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+*.env
+
+# Outputs (regeneratable)
+figures/*.png
+*.pdf
